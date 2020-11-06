@@ -6,7 +6,7 @@ import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
 // TYPES
 export interface IntermediateNode {
     type: string;
-    pick: string[];
+    items_to_pick: string[];
 }
 
 // CONSTANTS
@@ -20,48 +20,49 @@ export const SYM_TOKENS = Object.freeze({
     NONE: Symbol("NONE")
 });
 
+const kValidSymbolsAfterNode = new Set([SYM_TOKENS.PICK, SYM_TOKENS.NEXT]);
+
 export function* irParser(source: string): IterableIterator<IntermediateNode> {
     const iterator = tokenize(source);
-    let iteratorValue: SEQUENCE_OR_TOKEN<token>;
 
-    do {
+    while(1) {
         if (!isNode(getNextItem(iterator))) {
             throw new ParsingError("EXPECTED_NODE");
         }
         
         const type = getNodeIdentifier(getNextItem(iterator));
-        const pick: string[] = [];
+        const items_to_pick: string[] = [];
 
-        iteratorValue = getNextItem(iterator);
-        if (iteratorValue !== END_OF_SEQUENCE) {
-            const nextOrPickSymbol = getSymbol(iteratorValue);
-            if (nextOrPickSymbol !== SYM_TOKENS.NEXT && nextOrPickSymbol !== SYM_TOKENS.PICK) {
-                throw new ParsingError("EXPECTED_NEXT_OR_PICK");
+        const iteratorValue: SEQUENCE_OR_TOKEN<token> = getNextItem(iterator);
+        if (iteratorValue === END_OF_SEQUENCE) {
+            yield { type, items_to_pick }; break;
+        }
+
+        const nextOrPickSymbol = getSymbol(iteratorValue);
+        if (!kValidSymbolsAfterNode.has(nextOrPickSymbol)) {
+            throw new ParsingError("EXPECTED_NEXT_OR_PICK");
+        }
+
+        if (nextOrPickSymbol === SYM_TOKENS.PICK) {
+            if (type === "*") {
+                throw new ParsingError("CANNOT_PICK_WITH_STAR");
             }
-    
-            pickBlock: if (nextOrPickSymbol === SYM_TOKENS.PICK) {
-                if (type === "*") {
-                    throw new ParsingError("CANNOT_PICK_WITH_STAR");
-                }
-                pick.push(...pickItemsName(iterator));
-    
-                iteratorValue = getNextItem(iterator);
-                if (iteratorValue === END_OF_SEQUENCE) {
-                    break pickBlock;
-                }
+            items_to_pick.push(...iteratePickableItems(iterator));
 
-                const nextSymbol = getSymbol(iteratorValue);
-                if (nextSymbol !== SYM_TOKENS.NEXT) {
-                    throw new ParsingError("EXPECTED_NEXT");
-                }
+            const nextSymbol = getSymbol(getNextItem(iterator));
+            if (nextSymbol === SYM_TOKENS.NONE) {
+                yield { type, items_to_pick }; break;
+            }
+            if (nextSymbol !== SYM_TOKENS.NEXT) {
+                throw new ParsingError("EXPECTED_NEXT");
             }
         }
 
-        yield { type, pick };
-    } while (iteratorValue !== END_OF_SEQUENCE);
+        yield { type, items_to_pick };
+    }
 }
 
-function pickItemsName(iterator: IterableIterator<token>): Set<string> {
+function iteratePickableItems(iterator: IterableIterator<token>): Set<string> {
     const items = new Set<string>();
     const parenStart = getSymbol(getNextItem(iterator));
     if (parenStart !== SYM_TOKENS.BLOCK_START) {
@@ -108,20 +109,14 @@ function getWord(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
 }
 
 type ValueOf<T> = T[keyof T];
-function getSymbol(iteratorValue: SEQUENCE_OR_TOKEN<token>, getNone = true): ValueOf<typeof SYM_TOKENS> {
+function getSymbol(iteratorValue: SEQUENCE_OR_TOKEN<token>): ValueOf<typeof SYM_TOKENS> {
     if (iteratorValue === END_OF_SEQUENCE) {
-        if (getNone) {
-            return SYM_TOKENS.NONE;
-        }
-        throw new ParsingError("EXPECTED_SYMBOL");
+        return SYM_TOKENS.NONE;
     }
 
     const [token, value] = iteratorValue;
     if (token !== LEXER_TOKENS.SYMBOL) {
-        if (getNone) {
-            return SYM_TOKENS.NONE;
-        }
-        throw new ParsingError("EXPECTED_SYMBOL");
+        return SYM_TOKENS.NONE;
     }
 
     switch (value) {
