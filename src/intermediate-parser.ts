@@ -1,130 +1,145 @@
+// DEPENDENCIES
+import { tokenize, LEXER_TOKENS, token } from "./lexer";
+import { ParsingError } from "./errors";
+import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
 
-import { tokenize, kLexerTokens, token } from "./lexer";
-
-type intermediateToken = typeof kEndOfSequence | token;
-interface intermediateNode {
+// TYPES
+export interface IntermediateNode {
     type: string;
     pick: string[];
 }
 
 // CONSTANTS
-const kEndOfSequence = Symbol();
-const kSymbolTokens = Object.freeze({
+export const SYM_TOKENS = Object.freeze({
     PICK: Symbol("PICK"),
     NEXT: Symbol("NEXT"),
     NOR: Symbol("NOR"),
     BLOCK_START: Symbol("BSTART"),
     BLOCK_END: Symbol("BEND"),
     SPLIT: Symbol("SPLIT"),
-    NONE: Symbol()
+    NONE: Symbol("NONE")
 });
 
-function* intermediateParser(source: string): IterableIterator<intermediateNode> {
+export function* irParser(source: string): IterableIterator<IntermediateNode> {
     const iterator = tokenize(source);
-    let iteratorValue: intermediateToken;
+    let iteratorValue: SEQUENCE_OR_TOKEN<token>;
 
     do {
         if (!isNode(getNextItem(iterator))) {
-            throw new Error("TBC");
+            throw new ParsingError("EXPECTED_NODE");
         }
         
         const type = getNodeIdentifier(getNextItem(iterator));
         const pick: string[] = [];
 
         iteratorValue = getNextItem(iterator);
-        if (iteratorValue !== kEndOfSequence) {
+        if (iteratorValue !== END_OF_SEQUENCE) {
             const nextOrPickSymbol = getSymbol(iteratorValue);
-            if (nextOrPickSymbol !== kSymbolTokens.NEXT && nextOrPickSymbol !== kSymbolTokens.PICK) {
-                throw new Error("INVALID SYMBOL AFTER NODE ID");
+            if (nextOrPickSymbol !== SYM_TOKENS.NEXT && nextOrPickSymbol !== SYM_TOKENS.PICK) {
+                throw new ParsingError("EXPECTED_NEXT_OR_PICK");
             }
     
-            pickBlock: if (nextOrPickSymbol === kSymbolTokens.PICK) {
+            pickBlock: if (nextOrPickSymbol === SYM_TOKENS.PICK) {
+                if (type === "*") {
+                    throw new ParsingError("CANNOT_PICK_WITH_STAR");
+                }
                 pick.push(...pickItemsName(iterator));
     
                 iteratorValue = getNextItem(iterator);
-                if (iteratorValue == kEndOfSequence) {
+                if (iteratorValue === END_OF_SEQUENCE) {
                     break pickBlock;
                 }
 
                 const nextSymbol = getSymbol(iteratorValue);
-                if (nextSymbol !== kSymbolTokens.NEXT) {
-                    throw new Error("INVALID SYMBOL AFTER NODE ID");
+                if (nextSymbol !== SYM_TOKENS.NEXT) {
+                    throw new ParsingError("EXPECTED_NEXT");
                 }
             }
         }
 
         yield { type, pick };
-    } while (iteratorValue !== kEndOfSequence);
+    } while (iteratorValue !== END_OF_SEQUENCE);
 }
 
 function pickItemsName(iterator: IterableIterator<token>): Set<string> {
     const items = new Set<string>();
     const parenStart = getSymbol(getNextItem(iterator));
-    if (parenStart !== kSymbolTokens.BLOCK_START) {
-        throw new Error("INVALID ITEM BLOCK START!");
+    if (parenStart !== SYM_TOKENS.BLOCK_START) {
+        throw new ParsingError("PICK_START_SYMBOL");
     }
 
     let iterateSymbol: symbol;
     do {
-        const currIterate = getNextItem(iterator);
-        if (currIterate === kEndOfSequence) {
-            throw new Error("INVALID END OF SEQUENCE");
-        }
-
-        const [token, value] = currIterate as token;
-        if (token !== kLexerTokens.WORD) {
-            throw new Error("EXPECTED WORD!");
-        }
-        items.add(value);
-
+        items.add(getWord(getNextItem(iterator)));
         iterateSymbol = getSymbol(getNextItem(iterator));
-        if (iterateSymbol !== kSymbolTokens.BLOCK_END && iterateSymbol !== kSymbolTokens.SPLIT) {
-            throw new Error("INVALID ITEM SPLIT!");
+
+        if (iterateSymbol !== SYM_TOKENS.BLOCK_END && iterateSymbol !== SYM_TOKENS.SPLIT) {
+            throw new ParsingError("EXPECTED_SPLIT");
         }
-    } while (iterateSymbol !== kSymbolTokens.BLOCK_END)
+    } while (iterateSymbol !== SYM_TOKENS.BLOCK_END)
 
     return items;
 }
 
-function getNodeIdentifier(iteratorValue: intermediateToken): string {
-    const [token, value] = iteratorValue as token;
-    if (token !== kLexerTokens.WORD && (token === kLexerTokens.SYMBOL && value !== "*")) {
-        throw new Error("NOT A NODE IDENTIFIER!");
+function getNodeIdentifier(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
+    if (iteratorValue === END_OF_SEQUENCE) {
+        throw new ParsingError("EXPECTED_NODE_IDENTIFER");
+    }
+
+    const [token, value] = iteratorValue;
+    if (token !== LEXER_TOKENS.WORD && (token === LEXER_TOKENS.SYMBOL && value !== "*")) {
+        throw new ParsingError("EXPECTED_NODE_IDENTIFER");
     }
 
     return value; 
 }
 
-function getSymbol(iteratorValue: intermediateToken): symbol {
-    const [token, value] = iteratorValue as token;
-    if (token !== kLexerTokens.SYMBOL) {
-        throw new Error("INVALID SYMBOL!");
+function getWord(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
+    if (iteratorValue === END_OF_SEQUENCE) {
+        throw new ParsingError("PREMATURE_EOS");
+    }
+
+    const [token, value] = iteratorValue;
+    if (token !== LEXER_TOKENS.WORD) {
+        throw new ParsingError("EXPECTED_WORD");
+    }
+
+    return value;
+}
+
+type ValueOf<T> = T[keyof T];
+function getSymbol(iteratorValue: SEQUENCE_OR_TOKEN<token>, getNone = true): ValueOf<typeof SYM_TOKENS> {
+    if (iteratorValue === END_OF_SEQUENCE) {
+        if (getNone) {
+            return SYM_TOKENS.NONE;
+        }
+        throw new ParsingError("EXPECTED_SYMBOL");
+    }
+
+    const [token, value] = iteratorValue;
+    if (token !== LEXER_TOKENS.SYMBOL) {
+        if (getNone) {
+            return SYM_TOKENS.NONE;
+        }
+        throw new ParsingError("EXPECTED_SYMBOL");
     }
 
     switch (value) {
-        case ">": return kSymbolTokens.NEXT;
-        case ":": return kSymbolTokens.PICK;
-        case "|": return kSymbolTokens.NOR;
-        case "{": return kSymbolTokens.BLOCK_START;
-        case "}": return kSymbolTokens.BLOCK_END;
-        case ",": return kSymbolTokens.SPLIT;
-        default:  return kSymbolTokens.NONE;
+        case ">": return SYM_TOKENS.NEXT;
+        case ":": return SYM_TOKENS.PICK;
+        case "|": return SYM_TOKENS.NOR;
+        case "{": return SYM_TOKENS.BLOCK_START;
+        case "}": return SYM_TOKENS.BLOCK_END;
+        case ",": return SYM_TOKENS.SPLIT;
+        default:  return SYM_TOKENS.NONE;
     }
 }
 
-function isNode(iteratorValue: intermediateToken): boolean {
-    const [token, value] = iteratorValue as token;
+function isNode(iteratorValue: SEQUENCE_OR_TOKEN<token>): boolean {
+    if (iteratorValue === END_OF_SEQUENCE) {
+        throw new ParsingError("EXPECTED_NODE");
+    }
+    const [token, value] = iteratorValue;
 
-    return token === kLexerTokens.IDENTIFIER && value === "Node";
-}
-
-function getNextItem(iterator: IterableIterator<token>): intermediateToken {
-    const item = iterator.next();
-
-    return item.done ? kEndOfSequence : item.value;
-}
-
-const it = intermediateParser("Node(*) > Node(Identifier) : { name }");
-for (const node of it) {
-    console.log(node);
+    return token === LEXER_TOKENS.IDENTIFIER && value === "Node";
 }

@@ -1,58 +1,35 @@
-/**
- * Node(*) > Node(MemberExpression) |
- * Node(*) > Node(Identifier) : { name }
- */
+// DEPENDENCIES
+import { CONSTANTS, END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
 
+// TYPES
 export type token = [symbol, string];
-export type characters = "symbol" | "wordchar" | "none";
 
-// CONSTANTS
-const kIdentifierWords = new Set(["node"]);
-const kSymbolsCharacters = new Set(["*", ">", ":", "|", "{", "}", ","]);
-const kEndOfSequence = Symbol();
-
-export const kLexerTokens = Object.freeze({
-    WORD: Symbol(),
-    SYMBOL: Symbol(),
-    IDENTIFIER: Symbol()
+export const LEXER_TOKENS = Object.freeze({
+    WORD: Symbol("WORD"),
+    SYMBOL: Symbol("SYMBOL"),
+    IDENTIFIER: Symbol("IDENTIFIER")
 });
 
 export function* tokenize(chars: string): IterableIterator<token> {
     const iterator: IterableIterator<string> = chars[Symbol.iterator]();
-    let ch: typeof kEndOfSequence | string;
+    let ch: SEQUENCE_OR_TOKEN<string>;
 
     do {
         ch = getNextItem(iterator);
-        switch(charType(ch)) {
-            case "wordchar": {
-                let word = '';
-                do {
-                    word += ch as string;
-                    ch = getNextItem(iterator);
-                } while (isWordChar(ch));
+        if (isWordChar(ch)) {
+            let word = '';
+            do {
+                word += ch as string;
+                ch = getNextItem(iterator);
+            } while (isWordChar(ch));
 
-                yield [kIdentifierWords.has(word.toLowerCase()) ? kLexerTokens.IDENTIFIER : kLexerTokens.WORD, word];
-                break;
-            }
-            case "symbol":
-                yield [kLexerTokens.SYMBOL, ch as string];
-                break;
+            yield [CONSTANTS.WORDS.has(word) ? LEXER_TOKENS.IDENTIFIER : LEXER_TOKENS.WORD, word];
         }
-    } while (ch !== kEndOfSequence);
-}
 
-function getNextItem(iterator: IterableIterator<string>): typeof kEndOfSequence | string {
-    const item = iterator.next();
-
-    return item.done ? kEndOfSequence : item.value;
-}
-
-function charType(char: any): characters {
-    if (kSymbolsCharacters.has(char)) {
-        return "symbol";
-    }
-
-    return isWordChar(char) ? "wordchar" : "none";
+        if (CONSTANTS.SYMBOLS.has(ch as string)) {
+            yield [LEXER_TOKENS.SYMBOL, ch as string];
+        }
+    } while (ch !== END_OF_SEQUENCE);
 }
 
 function isWordChar(char: any): boolean {
