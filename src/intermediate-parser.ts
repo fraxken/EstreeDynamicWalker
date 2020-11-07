@@ -4,61 +4,95 @@ import { ParsingError } from "./errors";
 import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
 
 // TYPES
+export type IntermediateToken = string | IntermediateNode | IntermediateNode[];
 export interface IntermediateNode {
     type: string;
     items_to_pick: string[];
+    skip?: boolean;
 }
+
+export const IR_TOKENS = Object.freeze({
+    LABEL: Symbol("LABEL"),
+    NODE: Symbol("NODE"),
+    OR: Symbol("OR")
+});
 
 // CONSTANTS
 export const SYM_TOKENS = Object.freeze({
     PICK: Symbol("PICK"),
     NEXT: Symbol("NEXT"),
-    NOR: Symbol("NOR"),
+    OR: Symbol("OR"),
     BLOCK_START: Symbol("BSTART"),
     BLOCK_END: Symbol("BEND"),
     SPLIT: Symbol("SPLIT"),
+    SKIP: Symbol("SKIP"),
     NONE: Symbol("NONE")
 });
 
-const kValidSymbolsAfterNode = new Set([SYM_TOKENS.PICK, SYM_TOKENS.NEXT]);
+const kValidSymbolsAfterNode = new Set([SYM_TOKENS.PICK, SYM_TOKENS.NEXT, SYM_TOKENS.SKIP, SYM_TOKENS.OR]);
 
-export function* irParser(source: string): IterableIterator<IntermediateNode> {
+export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_TOKENS>, IntermediateToken]> {
+    const startWithLabel = source.length > 0 && source.charAt(0) === ">";
     const iterator = tokenize(source);
 
+    // Extract label
+    if (startWithLabel) {
+        const label = getLabel(iterator);
+        yield [IR_TOKENS.LABEL, label];
+    }
+
+    let orTemp: IntermediateNode[] = [];
     while(1) {
         if (!isNode(getNextItem(iterator))) {
             throw new ParsingError("EXPECTED_NODE");
         }
-        
-        const type = getNodeIdentifier(getNextItem(iterator));
-        const items_to_pick: string[] = [];
+        const node: IntermediateNode = {
+            type: getNodeIdentifier(getNextItem(iterator)),
+            items_to_pick: []
+        };
 
         const iteratorValue: SEQUENCE_OR_TOKEN<token> = getNextItem(iterator);
         if (iteratorValue === END_OF_SEQUENCE) {
-            yield { type, items_to_pick }; break;
+            yield [IR_TOKENS.NODE, node];
+            break;
         }
 
-        const nextOrPickSymbol = getSymbol(iteratorValue);
-        if (!kValidSymbolsAfterNode.has(nextOrPickSymbol)) {
-            throw new ParsingError("EXPECTED_NEXT_OR_PICK");
+        let nextSymbol = getSymbol(iteratorValue);
+        if (!kValidSymbolsAfterNode.has(nextSymbol)) {
+            throw new ParsingError("EXPECTED_END_SYMBOL");
         }
 
-        if (nextOrPickSymbol === SYM_TOKENS.PICK) {
-            if (type === "*") {
+        if (nextSymbol === SYM_TOKENS.PICK) {
+            if (node.type === "*") {
                 throw new ParsingError("CANNOT_PICK_WITH_STAR");
             }
-            items_to_pick.push(...iteratePickableItems(iterator));
+            node.items_to_pick.push(...iteratePickableItems(iterator));
 
-            const nextSymbol = getSymbol(getNextItem(iterator));
-            if (nextSymbol === SYM_TOKENS.NONE) {
-                yield { type, items_to_pick }; break;
-            }
-            if (nextSymbol !== SYM_TOKENS.NEXT) {
-                throw new ParsingError("EXPECTED_NEXT");
+            nextSymbol = getSymbol(getNextItem(iterator));
+            if (nextSymbol !== SYM_TOKENS.NONE && nextSymbol !== SYM_TOKENS.SKIP) {
+                throw new ParsingError("EXPECTED_EOS");
             }
         }
 
-        yield { type, items_to_pick };
+        if (nextSymbol === SYM_TOKENS.OR) {
+            orTemp.push(node);
+            continue;
+        }
+
+        let breakLoop = false;
+        if (nextSymbol === SYM_TOKENS.SKIP) {
+            node.skip = true;
+            breakLoop = true;
+        }
+
+        if (orTemp.length > 0) {
+            yield [IR_TOKENS.OR, orTemp];
+            orTemp = [];
+        }
+        else {
+            yield [IR_TOKENS.NODE, node];
+        }
+        if (breakLoop) break;
     }
 }
 
@@ -82,13 +116,28 @@ function iteratePickableItems(iterator: IterableIterator<token>): Set<string> {
     return items;
 }
 
+function getLabel(iterator: IterableIterator<token>): string {
+    const startSymbol = getSymbol(getNextItem(iterator));
+    if (startSymbol !== SYM_TOKENS.NEXT) {
+        throw new ParsingError("EXPECTED_NEXT");
+    }
+    
+    const label = getWord(getNextItem(iterator));
+    const endSymbol = getSymbol(getNextItem(iterator));
+    if (endSymbol !== SYM_TOKENS.NEXT) {
+        throw new ParsingError("EXPECTED_NEXT");
+    }
+
+    return label;
+}
+
 function getNodeIdentifier(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
     if (iteratorValue === END_OF_SEQUENCE) {
         throw new ParsingError("EXPECTED_NODE_IDENTIFER");
     }
 
     const [token, value] = iteratorValue;
-    if (token !== LEXER_TOKENS.WORD && (token === LEXER_TOKENS.SYMBOL && value !== "*")) {
+    if (token !== LEXER_TOKENS.TYPE && (token !== LEXER_TOKENS.SYMBOL || value !== "*")) {
         throw new ParsingError("EXPECTED_NODE_IDENTIFER");
     }
 
@@ -122,10 +171,11 @@ function getSymbol(iteratorValue: SEQUENCE_OR_TOKEN<token>): ValueOf<typeof SYM_
     switch (value) {
         case ">": return SYM_TOKENS.NEXT;
         case ":": return SYM_TOKENS.PICK;
-        case "|": return SYM_TOKENS.NOR;
+        case "|": return SYM_TOKENS.OR;
         case "{": return SYM_TOKENS.BLOCK_START;
         case "}": return SYM_TOKENS.BLOCK_END;
         case ",": return SYM_TOKENS.SPLIT;
+        case "!": return SYM_TOKENS.SKIP;
         default:  return SYM_TOKENS.NONE;
     }
 }

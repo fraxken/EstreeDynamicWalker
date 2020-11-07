@@ -7,7 +7,8 @@ export type token = [symbol, string];
 export const LEXER_TOKENS = Object.freeze({
     WORD: Symbol("WORD"),
     SYMBOL: Symbol("SYMBOL"),
-    IDENTIFIER: Symbol("IDENTIFIER")
+    IDENTIFIER: Symbol("IDENTIFIER"),
+    TYPE: Symbol("TYPE")
 });
 
 export function* tokenize(chars: string): IterableIterator<token> {
@@ -23,7 +24,15 @@ export function* tokenize(chars: string): IterableIterator<token> {
                 ch = getNextItem(iterator);
             } while (isWordChar(ch));
 
-            yield [CONSTANTS.WORDS.has(word) ? LEXER_TOKENS.IDENTIFIER : LEXER_TOKENS.WORD, word];
+            if (CONSTANTS.IDENTIFIERS.has(word)) {
+                yield [LEXER_TOKENS.IDENTIFIER, word];
+            }
+            else if (CONSTANTS.ESTREE.has(word)) {
+                yield [LEXER_TOKENS.TYPE, word];
+            }
+            else {
+                yield [LEXER_TOKENS.WORD, word];
+            }
         }
 
         if (CONSTANTS.SYMBOLS.has(ch as string)) {
