@@ -6,7 +6,7 @@ const { irParser } = require("./dist/intermediate-parser");
 const log = (str) => console.log(inspect(str, { compact: true, colors: true, depth: 4 }));
 
 // const str = "> label > Node(A) | Node(B) > Node(Identifier) : { name } !";
-const str = "> test > Node(BlockStatement) | Node(CallExpression) > Node(Identifier): { name } !";
+const str = "Node(VariableDeclaration) /kind=let /async > Node(Identifier) !";
 console.log(`\nParsing string: ${str}\n`);
 const it = irParser(str);
 log([...it]);

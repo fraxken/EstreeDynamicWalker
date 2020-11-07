@@ -14,15 +14,24 @@ export const LEXER_TOKENS = Object.freeze({
 export function* tokenize(chars: string): IterableIterator<token> {
     const iterator: IterableIterator<string> = chars[Symbol.iterator]();
     let ch: SEQUENCE_OR_TOKEN<string>;
+    let inQuote = false;
 
     do {
         ch = getNextItem(iterator);
-        if (isWordChar(ch)) {
+
+        if (ch === "'") {
+            inQuote = true;
+            continue;
+        }
+        else if (inQuote || isWordChar(ch)) {
             let word = '';
             do {
                 word += ch as string;
                 ch = getNextItem(iterator);
-            } while (isWordChar(ch));
+                if (ch === "'") {
+                    inQuote = false;
+                }
+            } while (inQuote || isWordChar(ch));
 
             if (CONSTANTS.IDENTIFIERS.has(word)) {
                 yield [LEXER_TOKENS.IDENTIFIER, word];
@@ -42,5 +51,5 @@ export function* tokenize(chars: string): IterableIterator<token> {
 }
 
 function isWordChar(char: any): boolean {
-    return typeof char === 'string' && /^[A-Za-z0-9]$/.test(char);
+    return typeof char === 'string' && /^[A-Za-z0-9-_.]$/.test(char);
 }
