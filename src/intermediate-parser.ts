@@ -18,7 +18,7 @@ export interface IntermediateNode {
 export const IR_TOKENS = Object.freeze({
     LABEL: Symbol("LABEL"),
     NODE: Symbol("NODE"),
-    OR: Symbol("OR")
+    OR_NODE: Symbol("OR_NODE")
 });
 
 // CONSTANTS
@@ -44,16 +44,21 @@ export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_T
     // Extract label
     yield [IR_TOKENS.LABEL, startWithLabel ? getLabel(iterator) : null];
 
-    let orTemp: IntermediateNode[] = [];
+    let orActivated: boolean = false;
     while(1) {
-        if (!isNode(getNextItem(iterator))) {
+        let iteratorValue: SEQUENCE_OR_TOKEN<token> = getNextItem(iterator);
+        if (iteratorValue === END_OF_SEQUENCE) {
+            break;
+        }
+
+        if (!isNode(iteratorValue)) {
             throw new ParsingError("EXPECTED_NODE");
         }
         const node: IntermediateNode = {
             type: getNodeIdentifier(getNextItem(iterator))
         };
 
-        const iteratorValue: SEQUENCE_OR_TOKEN<token> = getNextItem(iterator);
+        iteratorValue = getNextItem(iterator);
         if (iteratorValue === END_OF_SEQUENCE) {
             yield [IR_TOKENS.NODE, node];
             break;
@@ -75,13 +80,13 @@ export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_T
             node.items_to_pick = [...iteratePickableItems(iterator)];
             nextSymbol = getSymbol(getNextItem(iterator));
 
-            console.log(nextSymbol);
             if (nextSymbol !== SYM_TOKENS.NONE && nextSymbol !== SYM_TOKENS.SKIP) {
                 throw new ParsingError("EXPECTED_EOS", " (At the end of the current pattern.)");
             }
         }
         else if (nextSymbol === SYM_TOKENS.OR) {
-            orTemp.push(node);
+            orActivated = true;
+            yield [IR_TOKENS.OR_NODE, node];
             continue;
         }
 
@@ -91,10 +96,9 @@ export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_T
             breakLoop = true;
         }
 
-        if (orTemp.length > 0) {
-            orTemp.push(node);
-            yield [IR_TOKENS.OR, orTemp];
-            orTemp = [];
+        if (orActivated) {
+            orActivated = false;
+            yield [IR_TOKENS.OR_NODE, node];
         }
         else {
             yield [IR_TOKENS.NODE, node];
