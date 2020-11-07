@@ -1,7 +1,8 @@
 // DEPENDENCIES
+import levenshtein from "fast-levenshtein";
 import { tokenize, LEXER_TOKENS, token } from "./lexer";
 import { ParsingError } from "./errors";
-import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
+import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem, CONSTANTS } from "./utils";
 
 // TYPES
 export type label = string | null;
@@ -63,22 +64,23 @@ export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_T
             node.properties = Object.fromEntries(properties);
         }
         if (!kValidSymbolsAfterNode.has(nextSymbol)) {
-            throw new ParsingError("EXPECTED_END_SYMBOL");
+            throw new ParsingError("EXPECTED_AN_ACTION_SYMBOL");
+        }
+
+        if ((nextSymbol === SYM_TOKENS.PICK || nextSymbol === SYM_TOKENS.OR) && node.type === "*") {
+            throw new ParsingError("INVALID_STAR_NODE");
         }
 
         if (nextSymbol === SYM_TOKENS.PICK) {
-            if (node.type === "*") {
-                throw new ParsingError("CANNOT_PICK_WITH_STAR");
-            }
             node.items_to_pick = [...iteratePickableItems(iterator)];
-
             nextSymbol = getSymbol(getNextItem(iterator));
+
+            console.log(nextSymbol);
             if (nextSymbol !== SYM_TOKENS.NONE && nextSymbol !== SYM_TOKENS.SKIP) {
-                throw new ParsingError("EXPECTED_EOS");
+                throw new ParsingError("EXPECTED_EOS", " (At the end of the current pattern.)");
             }
         }
-
-        if (nextSymbol === SYM_TOKENS.OR) {
+        else if (nextSymbol === SYM_TOKENS.OR) {
             orTemp.push(node);
             continue;
         }
@@ -158,13 +160,20 @@ function getNodeProperties(iterator: IterableIterator<token>, iteratorValue: tok
 function getLabel(iterator: IterableIterator<token>): string {
     const startSymbol = getSymbol(getNextItem(iterator));
     if (startSymbol !== SYM_TOKENS.NEXT) {
-        throw new ParsingError("EXPECTED_NEXT");
+        throw new ParsingError("INVALID_LABEL");
     }
     
-    const label = getWord(getNextItem(iterator));
+    let label: string;
+    try {
+        label = getWord(getNextItem(iterator));
+    }
+    catch {
+        throw new ParsingError("INVALID_LABEL");
+    }
+
     const endSymbol = getSymbol(getNextItem(iterator));
     if (endSymbol !== SYM_TOKENS.NEXT) {
-        throw new ParsingError("EXPECTED_NEXT");
+        throw new ParsingError("INVALID_LABEL");
     }
 
     return label;
@@ -172,12 +181,19 @@ function getLabel(iterator: IterableIterator<token>): string {
 
 function getNodeIdentifier(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
     if (iteratorValue === END_OF_SEQUENCE) {
-        throw new ParsingError("EXPECTED_NODE_IDENTIFER");
+        throw new ParsingError("EXPECTED_ESTREE_TYPE", " Instead get End Of Sequence!");
     }
 
     const [token, value] = iteratorValue;
     if (token !== LEXER_TOKENS.TYPE && (token !== LEXER_TOKENS.SYMBOL || value !== "*")) {
-        throw new ParsingError("EXPECTED_NODE_IDENTIFER");
+        let customMessage: string = "";
+        if (token === LEXER_TOKENS.WORD) {
+            const estreeType = [...CONSTANTS.ESTREE].find((type) => levenshtein.get(type, value) <= 2);
+            if (estreeType) {
+                customMessage = ` Instead fetched WORD '${value}', did you mean '${estreeType}' ?`;
+            }
+        }
+        throw new ParsingError("EXPECTED_ESTREE_TYPE", customMessage);
     }
 
     return value; 
@@ -185,7 +201,7 @@ function getNodeIdentifier(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
 
 function getWord(iteratorValue: SEQUENCE_OR_TOKEN<token>): string {
     if (iteratorValue === END_OF_SEQUENCE) {
-        throw new ParsingError("PREMATURE_EOS");
+        throw new ParsingError("PREMATURE_EOS", " (When attempting to fetch a WORD token)");
     }
 
     const [token, value] = iteratorValue;

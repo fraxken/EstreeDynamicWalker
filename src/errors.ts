@@ -1,28 +1,28 @@
 
 // DEPENDENCIES
-import { CONSTANTS } from "./utils";
+import ExtendableError from "es6-error";
 
 export const ParsingCodes = Object.freeze({
-    EXPECTED_NODE: "Expected a 'Node' Identifier",
-    EXPECTED_NODE_IDENTIFER: "Expected a valid 'ESTREE Type' or a Symbol '*' for the Node name.",
-    EXPECTED_SYMBOL: `Expected one of the following Symbol (${[...CONSTANTS.SYMBOLS].join(", ")})`,
-    EXPECTED_WORD: "Expected a WORD.",
-    EXPECTED_END_SYMBOL: `Expected an ending Symbol: Next '>', Pick ':' or Skip '!'`,
-    EXPECTED_COMMA: "Expected a COMMA Symbol ','.",
+    EXPECTED_NODE: "Expected a 'Node()' Identifier token at the beginning of the block.",
+    EXPECTED_ESTREE_TYPE: "Expected a valid 'ESTREE Type' or a Symbol token '*' for the adjacent Node type.",
+    EXPECTED_WORD: "Expected a WORD Token.",
+    EXPECTED_AN_ACTION_SYMBOL: `Expected an action Symbol for the current block: Next '>', Pick ':' or Skip '!' and finally OR '|'`,
+    EXPECTED_COMMA: "Expecting a COMMA Symbol ',' between each Pickable items.",
     EXPECTED_EOS: "Expected an End of sequence after a Pick.",
     EXPECTED_NEXT: "Expected a Next '>' Symbol.",
-    CANNOT_PICK_WITH_STAR: "Impossible to pick properties when the Node Identifier is equal to '*'!",
-    PICK_START_SYMBOL: "Pick block must start with the Symbol '{'.",
-    PREMATURE_EOS: "Premature End of sequence detected!"
+    PICK_START_SYMBOL: "Pick block must always start with the Symbol token '{'.",
+    PREMATURE_EOS: "Premature End of sequence detected!",
+    INVALID_STAR_NODE: "A star Symbol token 'Node(*)' cannot be mixed with Pick ':' and OR '|' action Symbols.",
+    INVALID_LABEL: "Failed to parse LABEL at the start of the pattern. Label must be syntaxed as '> WORD >'."
 });
 
 export type KeyCode = keyof typeof ParsingCodes;
 
-export class ParsingError extends Error {
+export class ParsingError extends ExtendableError {
     public code: KeyCode;
 
-    constructor(code: KeyCode) {
-        super(ParsingCodes[code]);
+    constructor(code: KeyCode, customMessage: string = "") {
+        super(ParsingCodes[code] + customMessage);
         this.code = code;
     }
 }
