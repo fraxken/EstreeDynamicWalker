@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "es6-error": "^4.1.1",
-    "fast-levenshtein": "^3.0.0"
+    "fast-levenshtein": "^3.0.0",
+    "flatstr": "^1.0.12"
   }
 }

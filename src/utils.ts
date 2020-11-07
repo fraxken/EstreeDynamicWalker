@@ -93,3 +93,23 @@ export function getNextItem<T>(iterator: IterableIterator<T>): SEQUENCE_OR_TOKEN
 
     return item.done ? END_OF_SEQUENCE : item.value;
 }
+
+export function charSet(...plages: (number | string | [number, number])[]): Set<string> {
+    const ret = new Set<string>();
+    for (const plage of plages) {
+        if (typeof plage === "number") {
+            ret.add(String.fromCharCode(plage));
+            continue;
+        }
+        else if (typeof plage === "string") {
+            ret.add(plage);
+            continue;
+        }
+
+        for (let tid: number = plage[0]; tid <= plage[1]; tid++) {
+            ret.add(String.fromCharCode(tid));
+        }
+    }
+
+    return ret;
+}

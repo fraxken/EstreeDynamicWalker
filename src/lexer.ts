@@ -1,8 +1,17 @@
 // DEPENDENCIES
-import { CONSTANTS, END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
+import { CONSTANTS, END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem, charSet } from "./utils";
 
 // TYPES
 export type token = [symbol, string];
+
+// CONSTANTS
+const kWordChars = charSet(
+    [48, 57], // 0-9
+    [65, 90], // a-z
+    [97, 122], // A-Z
+    "-", "_", "."
+);
+const kQuoteChar = "'";
 
 export const LEXER_TOKENS = Object.freeze({
     WORD: Symbol("WORD"),
@@ -14,12 +23,12 @@ export const LEXER_TOKENS = Object.freeze({
 export function* tokenize(chars: string): IterableIterator<token> {
     const iterator: IterableIterator<string> = chars[Symbol.iterator]();
     let ch: SEQUENCE_OR_TOKEN<string>;
-    let inQuote = false;
+    let inQuote: boolean = false;
 
     do {
         ch = getNextItem(iterator);
 
-        if (ch === "'") {
+        if (ch === kQuoteChar) {
             inQuote = true;
             continue;
         }
@@ -28,7 +37,7 @@ export function* tokenize(chars: string): IterableIterator<token> {
             do {
                 word += ch as string;
                 ch = getNextItem(iterator);
-                if (ch === "'") {
+                if (ch === kQuoteChar) {
                     inQuote = false;
                 }
             } while (inQuote || isWordChar(ch));
@@ -51,5 +60,5 @@ export function* tokenize(chars: string): IterableIterator<token> {
 }
 
 function isWordChar(char: any): boolean {
-    return typeof char === 'string' && /^[A-Za-z0-9-_.]$/.test(char);
+    return kWordChars.has(char);
 }
