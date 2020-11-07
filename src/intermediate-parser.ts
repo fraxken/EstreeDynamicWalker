@@ -4,7 +4,8 @@ import { ParsingError } from "./errors";
 import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem } from "./utils";
 
 // TYPES
-export type IntermediateToken = string | IntermediateNode | IntermediateNode[];
+export type label = string | null;
+export type IntermediateToken = label | IntermediateNode | IntermediateNode[];
 export interface IntermediateNode {
     type: string;
     items_to_pick: string[];
@@ -36,10 +37,7 @@ export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_T
     const iterator = tokenize(source);
 
     // Extract label
-    if (startWithLabel) {
-        const label = getLabel(iterator);
-        yield [IR_TOKENS.LABEL, label];
-    }
+    yield [IR_TOKENS.LABEL, startWithLabel ? getLabel(iterator) : null];
 
     let orTemp: IntermediateNode[] = [];
     while(1) {
@@ -86,6 +84,7 @@ export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_T
         }
 
         if (orTemp.length > 0) {
+            orTemp.push(node);
             yield [IR_TOKENS.OR, orTemp];
             orTemp = [];
         }
