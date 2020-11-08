@@ -23,6 +23,7 @@
     "typescript": "^4.0.5"
   },
   "dependencies": {
+    "@slimio/is": "^1.5.1",
     "es6-error": "^4.1.1",
     "fast-levenshtein": "^3.0.0",
     "flatstr": "^1.0.12"

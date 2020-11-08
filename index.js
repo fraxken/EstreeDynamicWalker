@@ -1,7 +1,7 @@
 "use strict";
 
 const { inspect } = require("util");
-const { irParser } = require("./dist/intermediate-parser");
+const { Pattern } = require("./dist/pattern");
 
 const log = (str) => console.log(inspect(str, { compact: true, colors: true, depth: 4 }));
 
@@ -13,8 +13,8 @@ const str = `> searchIdentifiersInBlockAndFunctions >
 // const str = "Node(Identufier)";
 console.log(`\nAST Pattern: ${str}\n`);
 
-const it = irParser(str);
-log([...it])
+const it = new Pattern(str);
+// log([...it])
 console.log("\n");
 
 // const instance = hrParser([

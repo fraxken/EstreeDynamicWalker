@@ -1,5 +1,4 @@
 // DEPENDENCIES
-const flatstr = require("flatstr");
 import levenshtein from "fast-levenshtein";
 import { tokenize, LEXER_TOKENS, token } from "./lexer";
 import { ParsingError } from "./errors";
@@ -7,7 +6,7 @@ import { END_OF_SEQUENCE, SEQUENCE_OR_TOKEN, getNextItem, CONSTANTS } from "./ut
 
 // TYPES
 export type label = string | null;
-export type IntermediateToken = label | IntermediateNode | IntermediateNode[];
+export type IntermediateToken = label | IntermediateNode;
 export type IntermediateProperties = Record<string, string | boolean>;
 export interface IntermediateNode {
     type: string;
@@ -39,7 +38,6 @@ export const SYM_TOKENS = Object.freeze({
 const kValidSymbolsAfterNode = new Set([SYM_TOKENS.PICK, SYM_TOKENS.NEXT, SYM_TOKENS.SKIP, SYM_TOKENS.OR]);
 
 export function* irParser(source: string): IterableIterator<[ValueOf<typeof IR_TOKENS>, IntermediateToken]> {
-    flatstr(source);
     const startWithLabel = source.length > 0 && source.charAt(0) === ">";
     const iterator = tokenize(source);
 
